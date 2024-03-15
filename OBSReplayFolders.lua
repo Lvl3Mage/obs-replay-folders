@@ -18,15 +18,36 @@ end
 
 function obs_frontend_callback(event)
 	if event == obs.OBS_FRONTEND_EVENT_REPLAY_BUFFER_SAVED then
-		local path = get_replay_buffer_output()
+		local rootPath = get_replay_buffer_output()
+		local targetFolderPath = {}
 		local folder = get_running_game_title()
-		if path ~= nil and folder ~= nil then
-			print("Moving " .. path .. " to " .. folder)
-			move(path, folder)
+		if folder ~= nil then
+			table.insert(targetFolderPath, folder)
+		end
+		table.insert(targetFolderPath, 'Unsorted')
+
+		local profileName = obs.obs_frontend_get_current_profile()
+		if profileName ~= nil then
+			table.insert(targetFolderPath, profileName)
+		end
+
+		if rootPath ~= nil then
+			local finalDir = check_create_dir(rootPath, targetFolderPath)
+
+			move(rootPath, finalDir)
 		end
 	end
 end
-
+function check_create_dir(root, path)
+	local dir = get_folder_path(root)
+	for i = 1, #path do
+		dir = dir .. "/" .. path[i]
+		if not obs.os_file_exists(dir) then
+			obs.os_mkdir(dir)
+		end
+	end
+	return dir
+end
 function get_replay_buffer_output()
 	local replay_buffer = obs.obs_frontend_get_replay_buffer_output()
 	local cd = obs.calldata_create()
@@ -49,25 +70,37 @@ function get_running_game_title()
 	if len == 0 then
 		return nil
 	end
+	local title = ""
+	local i = 1
 	local max = len - 4
-	local i = max
-	while i > 1 do
+	while i <= max do
 		local char = result:sub(i, i)
 		if char == "\\" then
-			break
+			title = ""
+		else
+			title = title .. char
 		end
-		i = i - 1
+		i = i + 1
 	end
-	return result:sub(i + 1, max)
+	return firstToUpper(title)
 end
 
-function move(path, folder)
+function move(oldPath, newDir)
+	local file_name = get_file_name(oldPath)
+	local newPath = newDir .. file_name
+	print("Moving " .. oldPath .. " to " .. newPath)
+	obs.os_rename(oldPath, newPath)
+end
+function firstToUpper(str)
+    return (str:gsub("^%l", string.upper))
+end
+function get_folder_path(path)
 	local sep = string.match(path, "^.*()/")
-	local root = string.sub(path, 1, sep) .. folder
-	local file_name = string.sub(path, sep, string.len(path))
-	local adjusted_path = root .. file_name
-	if obs.os_file_exists(root) == false then
-		obs.os_mkdir(root)
-	end
-	obs.os_rename(path, adjusted_path)
+	local root = string.sub(path, 1, sep-1)
+	return root
+end
+function get_file_name(path)
+	local sep = string.match(path, "^.*()/")
+	local name = string.sub(path, sep, string.len(path))
+	return name
 end
